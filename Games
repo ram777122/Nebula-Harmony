@@ -1,0 +1,126 @@
+import pygame
+import math
+import random
+
+def many(n, func):
+    return [func(i) for i in range(n)]
+
+def lerp(a, b, t):
+    return a + (b - a) * t
+
+def noise(x, y, t=101):
+    w0 = math.sin(0.3 * x + 1.4 * t + 2.0 + 2.5 * math.sin(0.4 * y - 1.3 * t + 1.0))
+    w1 = math.sin(0.2 * y + 1.5 * t + 2.8 + 2.3 * math.sin(0.5 * x - 1.2 * t + 0.5))
+    return w0 + w1
+
+def pt(x, y):
+    return {'x': x, 'y': y}
+
+def draw_circle(surface, x, y, r, color):
+    pygame.draw.circle(surface, color, (int(x), int(y)), int(r))
+
+def draw_line(surface, x0, y0, x1, y1):
+    points = []
+    for i in range(100):
+        t = (i + 1) / 100
+        x = lerp(x0, x1, t)
+        y = lerp(y0, y1, t)
+        k = noise(x / 5 + x0, y / 5 + y0) * 2
+        points.append((x + k, y + k))
+    if len(points) > 1:
+        pygame.draw.lines(surface, (255, 255, 255), False, points)
+
+def spawn():
+    pts = many(333, lambda _: {
+        'x': random.random() * width,
+        'y': random.random() * height,
+        'len': 0,
+        'r': 0
+    })
+
+    pts2 = many(9, lambda i: {
+        'x': math.cos((i / 9) * math.pi * 2),
+        'y': math.sin((i / 9) * math.pi * 2)
+    })
+
+    seed = random.random() * 100
+    tx = random.random() * width
+    ty = random.random() * height
+    x = random.random() * width
+    y = random.random() * height
+    kx = random.uniform(0.5, 1)
+    ky = random.uniform(0.5, 1)
+    walk_radius = pt(random.uniform(50, 100), random.uniform(50, 100))
+    r = width / random.uniform(100, 150)
+
+    def paint_pt(surface, pt):
+        for pt2 in pts2:
+            if not pt['len']:
+                continue
+            draw_line(
+                surface,
+                lerp(x + pt2['x'] * r, pt['x'], pt['len'] * pt['len']),
+                lerp(y + pt2['y'] * r, pt['y'], pt['len'] * pt['len']),
+                x + pt2['x'] * r,
+                y + pt2['y'] * r
+            )
+        draw_circle(surface, pt['x'], pt['y'], pt['r'], (255, 255, 255))
+
+    def follow(new_tx, new_ty):
+        nonlocal tx, ty
+        tx = new_tx
+        ty = new_ty
+
+    def tick(surface, t):
+        nonlocal x, y
+        self_move_x = math.cos(t * kx + seed) * walk_radius['x']
+        self_move_y = math.sin(t * ky + seed) * walk_radius['y']
+        fx = tx + self_move_x
+        fy = ty + self_move_y
+
+        x += min(width / 100, (fx - x) / 10)
+        y += min(width / 100, (fy - y) / 10)
+
+        i = 0
+        for pt in pts:
+            dx = pt['x'] - x
+            dy = pt['y'] - y
+            length = math.hypot(dx, dy)
+            r = min(2, width / length / 5)
+            pt['t'] = 0
+            increasing = length < width / 10 and i < 8
+            i += 1 if increasing else 0
+            direction = 0.1 if increasing else -0.1
+            if increasing:
+                r *= 1.5
+            pt['r'] = r
+            pt['len'] = max(0, min(pt['len'] + direction, 1))
+            paint_pt(surface, pt)
+
+    return {'follow': follow, 'tick': tick}
+
+pygame.init()
+width, height = 800, 600
+screen = pygame.display.set_mode((width, height))
+clock = pygame.time.Clock()
+
+spiders = [spawn() for _ in range(2)]
+
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEMOTION:
+            for spider in spiders:
+                spider['follow'](*event.pos)
+
+    screen.fill((0, 0, 0))
+    t = pygame.time.get_ticks() / 1000
+    for spider in spiders:
+        spider['tick'](screen, t)
+
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
